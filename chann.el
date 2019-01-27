@@ -18,23 +18,29 @@
 (defvar chann-directory
   (file-name-as-directory (expand-file-name ".chann" user-emacs-directory)))
 
-(defvar chann-current-help-echo-query nil)
+(defvar chann-current-query nil)
 
-(defvar chann-current-help-echo-card nil)
+(defvar chann-current-card nil)
+
+(defvar chann-message-timer nil)
 
 (org-link-set-parameters
  "mtg"
- :follow 'chann-scryfall-search
+ :follow #'chann-scryfall-search
  :face 'chann-face
- :help-echo 'chann-help-echo)
+ :help-echo #'chann-help-echo)
 
 (defun chann-link-path ()
   "Get the path of the link under point."
-  (org-element-property :path (org-element-context)))
+  (let ((elem (org-element-context)))
+    (when (and (eq 'link (org-element-type elem))
+               (string= "mtg" (org-element-property :type elem)))
+      (org-element-property :path elem))))
 
 (defun chann-scryfall-search (query)
   "Search for QUERY on Scryfall."
-  (browse-url (concat "https://scryfall.com/search?q=" query)))
+  (let ((card (chann-read-card query)))
+    (browse-url (alist-get 'scryfall_uri card))))
 
 (defun chann-scryfall-api-search (query)
   "Search for QUERY on the Scryfall API."
@@ -61,23 +67,58 @@
             (print card (current-buffer))))
         card))))
 
+(defun chann-describe-card (card)
+  "Build a human-readable description of CARD."
+  (concat (alist-get 'name card) " " (alist-get 'mana_cost card) "\n"
+          (alist-get 'type_line card) "\n"
+          (alist-get 'oracle_text card)))
+
+(defun chann-link-message ()
+  "Display card info for the `chann-mode' link under point."
+  (interactive)
+  (let ((query (chann-link-path)))
+    (when query
+      (let ((card (if (string= query chann-current-query)
+                      chann-current-card
+                    (setq chann-current-query query
+                          chann-current-card (chann-read-card query)))))
+        (display-message-or-buffer (chann-describe-card card) " *chann*")
+        nil))))
+
 (defun chann-help-echo (window object position)
-  "Help echo for `chann' links.
+  "Help echo for `chann-mode' links.
 WINDOW, OBJECT, and POSITION as described in `org-link-parameters'"
   (ignore window)
   (save-excursion
     (with-current-buffer object
       (goto-char position)
-      (let* ((query (chann-link-path))
-             (card (if (string= query chann-current-help-echo-query)
-                       chann-current-help-echo-card
-                     (setq chann-current-help-echo-query query
-                           chann-current-help-echo-card (chann-read-card query)))))
-        (display-message-or-buffer (alist-get 'oracle_text card) " *chann*")
-        nil))))
+      (chann-link-message))))
 
-(print (chann-scryfall-api-search "Ponder"))
-(alist-get 'oracle_text (chann-read-card "Ponder"))
+(defun chann-auto-link-messages ()
+  "Automatically display card info for `chann-mode' links under point."
+  (interactive)
+  (unless chann-message-timer
+    (setq chann-message-timer (run-with-idle-timer 0.5 t 'chann-link-message))))
+
+(defun chann-stop-auto-link-messages ()
+  "Stop automatically display card info for `chann-mode' links under point."
+  (interactive)
+  (cancel-timer chann-message-timer)
+  (setq chann-message-timer nil))
+
+;;;###autoload
+(define-minor-mode chann-mode
+  "Toggle org-mode Magic: The Gathering link support."
+  :global t
+  :lighter " MTG")
+
+(defun chann-toggle-link-hook ()
+  "Hook to manage automatically displaying card info for `chann-mode' links under point."
+  (if chann-mode
+      (chann-auto-link-messages)
+    (chann-stop-auto-link-messages)))
+
+(add-hook 'chann-mode-hook #'chann-toggle-link-hook)
 
 (provide 'chann)
 ;;; chann.el ends here
