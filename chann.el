@@ -28,7 +28,8 @@
  "mtg"
  :follow #'chann-scryfall-search
  :face 'chann-face
- :help-echo #'chann-help-echo)
+ :help-echo #'chann-help-echo
+ :export #'chann-export-link)
 
 (defun chann-link-path ()
   "Get the path of the link under point."
@@ -37,15 +38,10 @@
                (string= "mtg" (org-element-property :type elem)))
       (org-element-property :path elem))))
 
-(defun chann-scryfall-search (query)
-  "Search for QUERY on Scryfall."
-  (let ((card (chann-read-card query)))
-    (browse-url (alist-get 'scryfall_uri card))))
-
 (defun chann-scryfall-api-search (query)
   "Search for QUERY on the Scryfall API."
   (let* ((buf (url-retrieve-synchronously
-              (concat "https://api.scryfall.com/cards/named?fuzzy=" query)
+              (concat "https://api.scryfall.com/cards/named?exact=" query)
               t t))
          (obj (with-current-buffer buf (json-read))))
     (kill-buffer buf)
@@ -59,13 +55,29 @@
     (if (file-readable-p path)
         (with-temp-buffer
           (insert-file-contents path)
-          (let ((inhibit-message t)) (message "reading"))
           (read (current-buffer)))
       (let ((card (chann-scryfall-api-search query)))
         (with-temp-file path
           (let ((print-length nil))
             (print card (current-buffer))))
         card))))
+
+(defun chann-export-link (path desc export)
+  "Export a `chann-mode' link.
+PATH, DESC, and EXPORT are described in `org-link-parameters'."
+  (cond
+   ((eq export 'html)
+    (concat
+     "<a href=\"" (alist-get 'scryfall_uri (chann-read-card path)) "\">"
+     (if desc desc path)
+     "</a>"))
+    (t
+     (concat "[[mtg:" path "][" desc "]]"))))
+
+(defun chann-scryfall-search (query)
+  "Search for QUERY on Scryfall."
+  (let ((card (chann-read-card query)))
+    (browse-url (alist-get 'scryfall_uri card))))
 
 (defun chann-describe-card (card)
   "Build a human-readable description of CARD."
