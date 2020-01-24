@@ -88,14 +88,15 @@ PATH, DESC, and EXPORT are described in `org-link-parameters'."
 (defun chann-link-message ()
   "Display card info for the `chann-mode' link under point."
   (interactive)
-  (let ((query (chann-link-path)))
-    (when query
-      (let ((card (if (string= query chann-current-query)
-                      chann-current-card
-                    (setq chann-current-query query
-                          chann-current-card (chann-read-card query)))))
-        (display-message-or-buffer (chann-describe-card card) " *chann*")
-        nil))))
+  (when (eq major-mode 'org-mode)
+    (let ((query (chann-link-path)))
+      (when query
+        (let ((card (if (string= query chann-current-query)
+                        chann-current-card
+                      (setq chann-current-query query
+                            chann-current-card (chann-read-card query)))))
+          (display-message-or-buffer (chann-describe-card card) " *chann*")
+          nil)))))
 
 (defun chann-help-echo (window object position)
   "Help echo for `chann-mode' links.
